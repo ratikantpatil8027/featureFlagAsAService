@@ -379,9 +379,6 @@ class FlagIntegrationTest {
         JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString());
         String flagId = created.get("featureFlagId").asText();
 
-        mockMvc.perform(patch("/flags/{id}/toggle", flagId))
-                .andExpect(status().isOk());
-
         String evaluateUS = """
                 {
                     "client": "conditional-test",
@@ -429,9 +426,6 @@ class FlagIntegrationTest {
 
         JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString());
         String flagId = created.get("featureFlagId").asText();
-
-        mockMvc.perform(patch("/flags/{id}/toggle", flagId))
-                .andExpect(status().isOk());
 
         String evaluateIn = """
                 {

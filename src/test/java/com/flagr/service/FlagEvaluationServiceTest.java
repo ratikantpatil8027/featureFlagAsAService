@@ -11,7 +11,6 @@ import com.flagr.util.FormulaEvaluatorUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Map;
@@ -19,7 +18,6 @@ import java.util.Optional;
 import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,11 +29,14 @@ class FlagEvaluationServiceTest {
     @Mock
     private FeatureFlagRolloutKeyRepository featureFlagRolloutKeyRepository;
 
-    @Mock
-    private FormulaEvaluatorUtil formulaEvaluatorUtil;
-
-    @InjectMocks
     private FlagEvaluationService flagEvaluationService;
+
+    @BeforeEach
+    void setUp() {
+        FormulaEvaluatorUtil formulaEvaluatorUtil = new FormulaEvaluatorUtil();
+        flagEvaluationService = new FlagEvaluationService(featureFlagRepository, featureFlagRolloutKeyRepository,
+                formulaEvaluatorUtil);
+    }
 
     @Test
     void returnsFalseImmediatelyWhenFlagDisabled() {
@@ -171,8 +172,6 @@ class FlagEvaluationServiceTest {
                 .attributes(Map.of("region", "Canada"))
                 .build();
 
-        when(formulaEvaluatorUtil.evaluate("region != 'Canada'", request.getAttributes())).thenReturn(false);
-
         EvaluateResponse response = flagEvaluationService.evaluate(request);
 
         assertFalse(response.isEnabled());
@@ -221,8 +220,6 @@ class FlagEvaluationServiceTest {
                 .name("flag")
                 .attributes(Map.of("region", "US"))
                 .build();
-
-        when(formulaEvaluatorUtil.evaluate("region != 'Canada'", request.getAttributes())).thenReturn(true);
 
         EvaluateResponse response = flagEvaluationService.evaluate(request);
 

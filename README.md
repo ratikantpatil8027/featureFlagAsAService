@@ -1,110 +1,80 @@
-# Feature Flag As A Service
+# Flagr Service - Feature Flag as a Service
 
-A backend service for managing and evaluating feature flags, built with Java Spring Boot. Clients integrate via an SDK that calls the REST API, passing a feature flag name and a map of attributes. The service evaluates and returns `true` or `false`.
-
-## Features
-
-- **Simple Toggle**: Flag is on or off globally
-- **Conditional Rules**: Flag returns `true` only when a formula over attributes is satisfied
-- **Percentage Rollout**: Flag is enabled for a deterministic, sticky percentage of attribute combinations
-- **Combined Modes**: All three modes can be combined
+A Spring Boot 3.x backend for managing and evaluating feature flags with support for simple toggles, conditional rules, and percentage rollouts.
 
 ## Tech Stack
 
-- Java 17
-- Spring Boot 3.x
-- Maven
-- PostgreSQL via Spring Data JPA & Hibernate
-- mvel2 for formula evaluation
-- Jackson for JSON
-- UUID for ID generation
-- JUnit 5 with Mockito and H2 for testing
+- **Java 17** / Spring Boot 3.2.0
+- **Maven** for dependency management
+- **PostgreSQL** via Spring Data JPA & Hibernate (H2 for testing)
+- **MVEL2** for formula evaluation
+- **Jackson** for JSON processing
 
 ## Project Structure
 
 ```
-src/
-├── main/java/com/flagr/
-│   ├── controller/          # REST endpoints
-│   ├── service/             # Business logic
-│   ├── repository/          # Data access layer
-│   ├── model/               # JPA entities
-│   ├── dto/                 # Request/Response DTOs
-│   ├── exception/           # Custom exceptions & global handler
-│   └── util/                # Utility classes (rollout hash, formula evaluation)
-├── main/resources/
-│   └── application.properties
-└── test/
+flagr-service/
+├── pom.xml
+├── src/main/
+│   ├── java/com/flagr/
+│   │   ├── FlagrServiceApplication.java
+│   │   ├── controller/
+│   │   │   ├── FeatureFlagController.java
+│   │   │   └── FlagEvaluationController.java
+│   │   ├── service/
+│   │   │   ├── FeatureFlagService.java
+│   │   │   ├── FeatureFlagRolloutService.java
+│   │   │   └── FlagEvaluationService.java
+│   │   ├── repository/
+│   │   │   ├── FeatureFlagRepository.java
+│   │   │   └── FeatureFlagRolloutKeyRepository.java
+│   │   ├── model/
+│   │   │   ├── FeatureFlag.java
+│   │   │   └── FeatureFlagRolloutKey.java
+│   │   ├── dto/
+│   │   │   ├── CreateFlagRequest.java
+│   │   │   ├── UpdateFlagRequest.java
+│   │   │   ├── RolloutRequest.java
+│   │   │   ├── EvaluateRequest.java
+│   │   │   ├── EvaluateResponse.java
+│   │   │   └── FlagResponse.java
+│   │   ├── util/
+│   │   │   ├── RolloutKeyUtil.java
+│   │   │   └── FormulaEvaluatorUtil.java
+│   │   └── exception/
+│   │       ├── FlagNotFoundException.java
+│   │       ├── InvalidFlagOperationException.java
+│   │       └── GlobalExceptionHandler.java
+│   └── resources/
+│       └── application.properties
+└── src/test/
     ├── java/com/flagr/
-    │   ├── service/         # Unit tests for services
-    │   ├── util/            # Unit tests for utilities
-    │   └── integration/     # Spring Boot integration tests
+    │   ├── util/
+    │   │   ├── RolloutKeyUtilTest.java
+    │   │   └── FormulaEvaluatorUtilTest.java
+    │   ├── service/
+    │   │   ├── FeatureFlagServiceTest.java
+    │   │   ├── FeatureFlagRolloutServiceTest.java
+    │   │   └── FlagEvaluationServiceTest.java
+    │   └── integration/
+    │       └── FlagIntegrationTest.java
     └── resources/
-        └── application-test.properties
+        ├── application-test.properties
+        └── mockito-extensions/org.mockito.plugins.MockMaker
 ```
 
-## Data Model
-
-### `feature_flag` Table
-
-| Column          | Type      | Constraints                     | Description                                      |
-|-----------------|-----------|---------------------------------|--------------------------------------------------|
-| feature_flag_id | UUID      | PK, auto-generated              | Unique identifier                                |
-| client          | String    | NOT NULL                        | Client identifier                                |
-| name            | String    | NOT NULL                        | Flag name                                        |
-| attributes      | JSONB     |                                 | Attribute schema: `{"user_id":"num","region":"string"}` |
-| formula_string  | String    | Nullable                        | Formula for conditional evaluation               |
-| rollout         | int       | Default 0                       | Rollout percentage (0-100)                       |
-| enabled         | boolean   | Default false                   | Global toggle state                              |
-
-Unique constraint on `(client, name)`.
-
-### `feature_flag_rollout_key` Table
-
-| Column          | Type      | Constraints                     | Description                                      |
-|-----------------|-----------|---------------------------------|--------------------------------------------------|
-| id              | UUID      | PK, auto-generated              | Unique identifier                                |
-| feature_flag_id | UUID      | FK → feature_flag, NOT NULL     | Reference to parent flag                         |
-| rollout_key     | String    | NOT NULL                        | Hex-encoded SHA-256 of attribute values          |
-| threshold       | int       | Default 0                       | Rollout threshold percentage                     |
-
-**Relationship**: `feature_flag` 1 — N `feature_flag_rollout_key`
-
-## Rollout Key Computation
-
-Sticky rollout is guaranteed by a deterministic hash:
-
-1. Sort attribute keys alphabetically
-2. Concatenate values as strings in sorted key order
-3. SHA-256 hash the result
-4. Take absolute value mod 100 → integer 0–99
-
-Identical attribute values always produce the same hash, ensuring consistent (sticky) behavior.
-
-## API Endpoints
+## API Documentation
 
 ### Flag Management
 
-| Method   | Endpoint               | Description                        | Status Code |
-|----------|------------------------|------------------------------------|-------------|
-| POST     | `/flags`               | Create a new flag                  | 201         |
-| PUT      | `/flags/{id}`          | Update an existing flag            | 200         |
-| DELETE   | `/flags/{id}`          | Delete a flag                      | 204         |
-| PATCH    | `/flags/{id}/toggle`   | Toggle enabled (simple flags only) | 200         |
-| PUT      | `/flags/{id}/rollout`  | Set rollout percentage             | 200         |
+#### Create Flag
 
-### SDK Evaluation
-
-| Method   | Endpoint          | Description                     | Status Code |
-|----------|-------------------|---------------------------------|-------------|
-| POST     | `/flags/evaluate` | Evaluate a flag for given attrs | 200         |
-
-## Request/Response Examples
-
-### Create Flag
-
-```json
+```
 POST /flags
+```
+
+**Request Body:**
+```json
 {
   "client": "my-app",
   "name": "dark-mode",
@@ -112,15 +82,98 @@ POST /flags
     "user_id": "num",
     "region": "string"
   },
-  "formula_string": "user_id NOT IN (1,2,3) AND region != 'Canada'",
+  "formulaString": "region != 'Canada'",
+  "rollout": 0
+}
+```
+
+- `client` (string, required): Client identifier
+- `name` (string, required): Flag name (unique per client)
+- `attributes` (object, required): Schema mapping attribute names to types (`"num"` or `"string"`)
+- `formulaString` (string, optional): MVEL2 formula for conditional evaluation
+- `rollout` (int, optional): Default 0
+
+**Response:** `201 Created`
+```json
+{
+  "featureFlagId": "uuid-string",
+  "client": "my-app",
+  "name": "dark-mode",
+  "attributes": "{\"user_id\":\"num\",\"region\":\"string\"}",
+  "formulaString": "region != 'Canada'",
+  "rollout": 0,
+  "enabled": true
+}
+```
+
+#### Update Flag
+
+```
+PUT /flags/{id}
+```
+
+**Request Body:** (all fields optional)
+```json
+{
+  "client": "my-app",
+  "name": "dark-mode-updated",
+  "attributes": {
+    "user_id": "num"
+  },
+  "formulaString": "user_id > 10",
   "rollout": 50
 }
 ```
 
-### Evaluate Flag (SDK Call)
+**Response:** `200 OK` with updated `FlagResponse`
 
+#### Delete Flag
+
+```
+DELETE /flags/{id}
+```
+
+**Response:** `204 No Content`
+
+#### Toggle Flag
+
+```
+PATCH /flags/{id}/toggle
+```
+
+Flips the `enabled` state. Only works on simple flags (no `formulaString`).
+
+**Response:** `200 OK` with updated `FlagResponse`
+
+**Error:** `400 Bad Request` if flag has a formula (use evaluation endpoint instead)
+
+#### Set Rollout Percentage
+
+```
+PUT /flags/{id}/rollout
+```
+
+**Request Body:**
 ```json
+{
+  "percentage": 50
+}
+```
+
+- `percentage` (int, required): Value between 0 and 100
+
+**Response:** `200 OK`
+
+### SDK Evaluation Endpoint
+
+#### Evaluate Flag
+
+```
 POST /flags/evaluate
+```
+
+**Request Body:**
+```json
 {
   "client": "my-app",
   "name": "dark-mode",
@@ -131,72 +184,112 @@ POST /flags/evaluate
 }
 ```
 
-Response:
+- `client` (string, required): Client identifier
+- `name` (string, required): Flag name
+- `attributes` (object, required): Actual attribute values
 
+**Response:** `200 OK`
 ```json
 {
   "enabled": true
 }
 ```
 
-### Evaluate Flow
+**Error:** `404 Not Found` if flag does not exist
 
-1. Fetch flag by `(client, name)` → 404 if absent
-2. If `enabled = false` → return `false`
+### Evaluation Flow
+
+1. Fetch flag by `(client, name)` - return 404 if not found
+2. If `enabled = false`, return `{"enabled": false}`
 3. If `rollout > 0`:
-   - Compute hash of request attributes
-   - If hash >= threshold → return `false`
-   - Persist new rollout key row if one does not exist
-4. If `formula_string` is present:
-   - Evaluate formula against attributes
-   - If `false` → return `false`
-5. Return `true`
+   - Compute SHA-256 hash of sorted attribute values, mod 100
+   - If hash >= threshold, return `{"enabled": false}`
+   - Persist new rollout key row if one doesn't exist
+4. If `formulaString` is present:
+   - Evaluate formula against attributes via MVEL2
+   - If false, return `{"enabled": false}`
+5. Return `{"enabled": true}`
 
-## Supported Formula Operators (mvel2)
+### Formula Syntax (MVEL2)
 
-`IN`, `NOT IN`, `==`, `!=`, `&&`, `||`, `>`, `<`, `>=`, `<=`
+Supported operators:
+
+| Operator | Example |
+|----------|---------|
+| `==` | `region == 'US'` |
+| `!=` | `region != 'Canada'` |
+| `>` | `user_id > 10` |
+| `<` | `user_id < 100` |
+| `>=` | `user_id >= 18` |
+| `<=` | `user_id <= 65` |
+| `&&` | `user_id > 10 && region == 'US'` |
+| `\|\|` | `region == 'US' \|\| region == 'CA'` |
+| `in` | `user_id in {1,2,3}` |
+| `not in` | `user_id not in {1,2,3}` |
+
+### Rollout Key Computation
+
+1. Sort attribute keys alphabetically
+2. Concatenate values as strings in sorted key order
+3. SHA-256 hash the concatenated string
+4. Take first 4 bytes as integer, `Math.abs() % 100`
+
+Same attribute values always produce the same hash, guaranteeing sticky rollout behavior.
+
+## Running
+
+```bash
+# Build and run all tests
+mvn clean test
+
+# Run with PostgreSQL
+mvn spring-boot:run -Dspring.profiles.active=default
+```
 
 ## Configuration
 
 ### Production (`application.properties`)
 
-Configure PostgreSQL datasource:
-
 ```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/flagr
-spring.datasource.username=your_user
-spring.datasource.password=your_password
+spring.datasource.url=jdbc:postgresql://localhost:5432/flagr_db
+spring.datasource.username=flagr_user
+spring.datasource.password=flagr_password
 spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 ```
 
 ### Test (`application-test.properties`)
 
-Uses H2 in-memory database with `ddl-auto=create-drop`.
-
-## Running the Project
-
-```bash
-# Build
-mvn clean install
-
-# Run
-mvn spring-boot:run
-
-# Run tests
-mvn test
+```properties
+spring.datasource.url=jdbc:h2:mem:flagrdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+spring.jpa.hibernate.ddl-auto=create-drop
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect
 ```
 
-## Error Handling
+## Database Schema
 
-| Exception                   | HTTP Status | Description                        |
-|-----------------------------|-------------|------------------------------------|
-| `FlagNotFoundException`     | 404         | Flag does not exist                |
-| `InvalidFlagOperationException` | 400     | Invalid operation (e.g., toggle on conditional flag) |
+### feature_flag
 
-Response body:
+| Column | Type | Constraints |
+|--------|------|-------------|
+| feature_flag_id | UUID | PK, auto-generated |
+| client | VARCHAR | NOT NULL |
+| name | VARCHAR | NOT NULL |
+| attributes | JSONB | Attribute schema |
+| formula_string | VARCHAR | Nullable |
+| rollout | INT | Default 0 |
+| enabled | BOOLEAN | Default false |
 
-```json
-{
-  "error": "Description of the error"
-}
-```
+Unique constraint on `(client, name)`.
+
+### feature_flag_rollout_key
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | UUID | PK, auto-generated |
+| feature_flag_id | UUID | FK to feature_flag, NOT NULL |
+| rollout_key | VARCHAR | NOT NULL (hex SHA-256) |
+| threshold | INT | Default 0 |

@@ -56,10 +56,10 @@ public class FeatureFlagService {
                 .attributes(attributesJson)
                 .formulaString(req.getFormulaString())
                 .rollout(0)
-                .enabled(false)
+                .enabled(req.getFormulaString() != null && !req.getFormulaString().isBlank())
                 .build();
 
-        featureFlagRepository.save(flag);
+        flag = featureFlagRepository.save(flag);
 
         FeatureFlagRolloutKey rolloutKey = FeatureFlagRolloutKey.builder()
                 .featureFlag(flag)
@@ -146,7 +146,12 @@ public class FeatureFlagService {
     @SuppressWarnings("unchecked")
     private Map<String, String> parseAttributes(String attributesJson) {
         try {
-            return objectMapper.readValue(attributesJson, Map.class);
+            String cleaned = attributesJson;
+            if (cleaned.startsWith("\"") && cleaned.endsWith("\"")) {
+                cleaned = cleaned.substring(1, cleaned.length() - 1);
+                cleaned = cleaned.replace("\\\"", "\"");
+            }
+            return objectMapper.readValue(cleaned, Map.class);
         } catch (JsonProcessingException e) {
             throw new InvalidFlagOperationException("Failed to parse attributes: " + e.getMessage());
         }
